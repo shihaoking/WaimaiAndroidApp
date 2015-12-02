@@ -11,10 +11,10 @@ import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.TextView;
-import org.ksoap2.SoapEnvelope;
-import org.ksoap2.serialization.SoapObject;
-import org.ksoap2.serialization.SoapSerializationEnvelope;
-import org.ksoap2.transport.HttpTransportSE;
+
+import com.example.shihaoking.myapplication.entity.ShopEntity;
+import com.example.shihaoking.myapplication.service.ShopRemoteService;
+import com.example.shihaoking.myapplication.service.impl.ShopRemoteServiceImpl;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -30,12 +30,12 @@ public class MainActivity extends AppCompatActivity {
             boolean successful = bundle.getBoolean("successful");
 
 
-            if(successful) {
+            if (successful) {
                 String result = bundle.getString("result");
                 MainActivity.this.textView.setText(result);
 
-            }else {
-                Exception exception = (Exception)bundle.getSerializable("exception");
+            } else {
+                Exception exception = (Exception) bundle.getSerializable("exception");
                 Snackbar.make(MainActivity.this.callView, "请求失败：" + exception.getMessage(), Snackbar.LENGTH_LONG)
                         .setAction("Action", null).show();
 
@@ -64,7 +64,7 @@ public class MainActivity extends AppCompatActivity {
                 Snackbar.make(view, "请求中...", Snackbar.LENGTH_LONG)
                         .setAction("Action", null).show();
 
-                new Thread(){
+                new Thread() {
                     @Override
                     public void run() {
                         try {
@@ -73,30 +73,19 @@ public class MainActivity extends AppCompatActivity {
                             e.printStackTrace();
                         }
 
-                        String url = "http://10.14.3.35:8090/ShopService?wsdl";
-                        String namespace ="http://service.zhaishifu.com/";
-                        String methodName = "getShop";
-
-                        SoapObject request = new SoapObject(namespace, methodName);
-                        request.addProperty("arg0", 23);
-
-                        HttpTransportSE ht = new HttpTransportSE(url);
-
-                        SoapSerializationEnvelope envelope = new SoapSerializationEnvelope(SoapEnvelope.VER11);
-                        envelope.dotNet = false;
-                        envelope.setOutputSoapObject(request);
-
                         Message msg = new Message();
                         Bundle bundle = new Bundle();
 
                         try {
+                            ShopRemoteService shopRemoteService = new ShopRemoteServiceImpl();
+                            ShopEntity shopEntity1 = new ShopEntity();
+                            shopEntity1.setCategoryId(1);
+                            shopRemoteService.getShops(shopEntity1);
 
-                            ht.call(namespace + methodName, envelope);
-                            SoapObject rpcObject = (SoapObject)envelope.bodyIn;
-                            SoapObject result = (SoapObject)rpcObject.getProperty(0);
+                            ShopEntity shopEntity = shopRemoteService.getShop(23);
 
                             bundle.putBoolean("successful", true);
-                            bundle.putString("result", result.getPropertyAsString("id") +":"+ result.getPropertyAsString("name")+":"+result.getPropertyAsString("categoryId"));
+                            bundle.putString("result", shopEntity.getId() + ":" + shopEntity.getName());
 
                         } catch (Exception e) {
                             bundle.putBoolean("successful", false);
@@ -110,7 +99,6 @@ public class MainActivity extends AppCompatActivity {
             }
         });
     }
-
 
 
     @Override
