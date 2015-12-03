@@ -6,14 +6,18 @@ import com.example.shihaoking.myapplication.service.SoapService;
 import org.ksoap2.serialization.SoapObject;
 import org.xmlpull.v1.XmlPullParserException;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Enumeration;
 import java.util.List;
+import java.util.Vector;
 
 
 /**
  * Created by shihaoking on 2015/11/30.
  */
 public class ShopRemoteServiceImpl implements ShopRemoteService {
-    final String url = "http://192.168.1.4:8090/ShopService?wsdl";
+//    final String url = "http://192.168.1.4:8090/ShopService?wsdl";
+    final String url = "http://10.14.3.35:8090/ShopService?wsdl";
     final String namespace ="http://service.zhaishifu.com/";
 
     @Override
@@ -50,21 +54,38 @@ public class ShopRemoteServiceImpl implements ShopRemoteService {
         SoapService soapService = new SoapService(url, namespace, "getShops");
         soapService.addRequestPropertyInfo("arg0", shopEntity);
 
-        SoapObject rpcObject = null;
+        Vector rpcObject = null;
 
         try {
-            rpcObject = (SoapObject)soapService.requestResult();
+            rpcObject = (Vector)soapService.requestResult();
         } catch (IOException e) {
             e.printStackTrace();
         } catch (XmlPullParserException e) {
             e.printStackTrace();
         }
 
-        if(rpcObject == null || rpcObject.getPropertyCount() == 0){
-            return null;
+        List<ShopEntity> result = new ArrayList<>();
+
+        Enumeration<SoapObject> enums = rpcObject.elements();
+
+        while (enums.hasMoreElements()){
+            ShopEntity shop = new ShopEntity();
+            SoapObject item = enums.nextElement();
+
+            if(item.getPropertyCount() < 5){
+                continue;
+            }
+
+            shop.setId(Integer.parseInt(item.getPropertyAsString("id")));
+            shop.setName(item.getPropertyAsString("name"));
+            shop.setAddress(item.getPropertyAsString("address"));
+            shop.setPhoneNumber(item.getPropertyAsString("phoneNumber"));
+            shop.setCategoryId(Integer.parseInt(item.getPropertyAsString("categoryId")));
+            shop.setImageUrl(item.getPropertyAsString("imageUrl"));
+
+            result.add(shop);
         }
 
-
-        return null;
+        return result;
     }
 }
