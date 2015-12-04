@@ -1,27 +1,29 @@
 package com.example.shihaoking.myapplication;
 
+import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
-import android.os.Parcelable;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
-import android.widget.ImageView;
+import android.widget.AdapterView;
+import android.widget.BaseAdapter;
+import android.widget.Button;
 import android.widget.ListView;
-import android.widget.SimpleAdapter;
 import android.widget.TextView;
 
 import com.example.shihaoking.myapplication.entity.ShopEntity;
+import com.example.shihaoking.myapplication.listadapter.ShopListViewAdapter;
 import com.example.shihaoking.myapplication.service.ShopRemoteService;
 import com.example.shihaoking.myapplication.service.impl.ShopRemoteServiceImpl;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.Serializable;
@@ -32,68 +34,40 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
+
 public class MainActivity extends AppCompatActivity {
 
     private View callView;
     private ListView listView;
-
-    private List<HashMap<String, Object>> listViewData = new ArrayList<>();
+    private List<ShopEntity> shopEntities;
 
     final Handler handler = new Handler() {
         @Override
         public void handleMessage(Message msg) {
             super.handleMessage(msg);
-
             Bundle bundle = msg.getData();
             boolean successful = bundle.getBoolean("successful");
-
 
             if (successful) {
                 List<ShopEntity> result = (ArrayList<ShopEntity>) bundle.getSerializable("result");
 
+                ShopListViewAdapter shopListViewAdapter = new ShopListViewAdapter((LayoutInflater) getSystemService(Context.LAYOUT_INFLATER_SERVICE));
+
                 for (ShopEntity shopItem : result) {
-                    HashMap<String, Object> item = new HashMap<String, Object>();
-                    item.put("name", shopItem.getName());
-                    item.put("address", shopItem.getAddress());
+                    HashMap<String, Object> hashMap = new HashMap<>();
+                    hashMap.put("id", shopItem.getId());
+                    hashMap.put("name", shopItem.getName());
+                    hashMap.put("address", shopItem.getAddress());
 
-                    Bitmap bitmap = null;
-                    try {
-                        URL url = new URL(shopItem.getImageUrl());
-                        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-
-                        InputStream inputStream = conn.getInputStream();
-                        bitmap = BitmapFactory.decodeStream(inputStream);
-
-                        item.put("imageMap", bitmap);
-                    } catch (MalformedURLException e) {
-                        e.printStackTrace();
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-
-
-                    listViewData.add(item);
+                    shopListViewAdapter.addItem(hashMap);
                 }
 
-                SimpleAdapter simpleAdapter = new SimpleAdapter(
-                        MainActivity.this,
-                        listViewData,
-                        R.layout.shop_list,
-                        new String[]{"name", "address", "imageMap"},
-                        new int[]{R.id.shopName, R.id.shopAddress});
 
-                simpleAdapter.setViewBinder(new SimpleAdapter.ViewBinder() {
-                    @Override
-                    public boolean setViewValue(View view, Object data, String textRepresentation) {
-                        if (view.getId() == R.id.shopImg){
-                            ImageView imageView = (ImageView)view;
-                            imageView.setImageBitmap((Bitmap) data);
-                        }
-                        return false;
-                    }
-                });
+                listView.setAdapter(shopListViewAdapter);
 
-                listView.setAdapter(simpleAdapter);
+                for (ShopEntity shopItem: result) {
+                    new Thread(new ShopImageRunnable(shopItem.getId(), shopItem.getImageUrl())).start();
+                }
 
             } else {
                 Exception exception = (Exception) bundle.getSerializable("exception");
@@ -105,14 +79,30 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
+    final Handler shopImageLoadHandler = new Handler() {
+        @Override
+        public void handleMessage(Message msg) {
+            super.handleMessage(msg);
+
+            Bundle bundle = msg.getData();
+            int shopId = bundle.getInt("shopId");
+            Bitmap bitmap = (Bitmap) bundle.get("bitMap");
+
+            for (int i = 0; i < listView.getAdapter().getCount(); i++) {
+                if (listView.getAdapter().getItemId(i) == shopId) {
+                    BaseAdapter shopListViewAdapter = (BaseAdapter)listView.getAdapter();
+                    HashMap<String, Object> hashMap  = (HashMap<String, Object>)shopListViewAdapter.getItem(i);
+                    hashMap.put("imageBitMap", bitmap);
+                    shopListViewAdapter.notifyDataSetChanged();
+                    break;
+                }
+            }
+        }
+    };
+
     final Runnable shopDataRunnable = new Runnable() {
         @Override
         public void run() {
-            try {
-                Thread.sleep(1000);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
 
             Message msg = new Message();
             Bundle bundle = new Bundle();
@@ -122,11 +112,11 @@ public class MainActivity extends AppCompatActivity {
                 ShopEntity shopEntity1 = new ShopEntity();
                 shopEntity1.setCategoryId(1);
 
-                List<ShopEntity> shops = shopRemoteService.getShops(shopEntity1);
+                shopEntities = shopRemoteService.getShops(shopEntity1);
 
 
                 bundle.putBoolean("successful", true);
-                bundle.putSerializable("result", (Serializable) shops);
+                bundle.putSerializable("result", (Serializable) shopEntities);
 
             } catch (Exception e) {
                 bundle.putBoolean("successful", false);
@@ -138,12 +128,40 @@ public class MainActivity extends AppCompatActivity {
         }
     };
 
-    final Runnable shopImageRunnable = new Runnable() {
+    class ShopImageRunnable implements Runnable {
+        private int shopId;
+        private String imageUrl;
+
+        public ShopImageRunnable(int shopId, String imageUrl) {
+            this.shopId = shopId;
+            this.imageUrl = imageUrl;
+        }
+
         @Override
         public void run() {
 
+            try {
+                URL url = new URL(imageUrl);
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+
+                InputStream inputStream = conn.getInputStream();
+                Bitmap bitmap = BitmapFactory.decodeStream(inputStream);
+
+                Bundle bundle = new Bundle();
+                bundle.putInt("shopId", shopId);
+                bundle.putParcelable("bitMap", bitmap);
+
+                Message msg = new Message();
+                msg.setData(bundle);
+                shopImageLoadHandler.sendMessage(msg);
+
+            } catch (MalformedURLException e) {
+                e.printStackTrace();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
-    };
+    }
 
 
     @Override
@@ -153,7 +171,7 @@ public class MainActivity extends AppCompatActivity {
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
-        listView = (ListView) findViewById(R.id.mainListView);
+
 
         FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
 
@@ -167,9 +185,21 @@ public class MainActivity extends AppCompatActivity {
                 new Thread(shopDataRunnable).start();
             }
         });
+
+        listView = (ListView) findViewById(R.id.mainListView);
+
+        listView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            @Override
+            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+                ShopListViewAdapter.ViewHolder viewHolder = (ShopListViewAdapter.ViewHolder)view.getTag();
+                TextView shopIdTextView = viewHolder.shopIdTextView;
+
+                Snackbar.make(MainActivity.this.callView, shopIdTextView.getText().toString(), Snackbar.LENGTH_LONG)
+                        .setAction("Action", null).show();
+            }
+        });
+
     }
-
-
 
 
     @Override
